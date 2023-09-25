@@ -120,11 +120,18 @@ void loop()
         read.trim();
         if (read == "O")
         {
+            Serial.println("Opening...!");
             openValve();
         }
-        if (read == "C")
+        else if (read == "C")
         {
+            Serial.println("Closing...!");
             closeValve();
+        }
+        else
+        {
+            Serial.print("Unknown command: ");
+            Serial.println(read);
         }
     }
     if (state == STATE_CLOSING || state == STATE_OPENING)
@@ -132,10 +139,12 @@ void loop()
         if (lastEncoderDiff < MICROS_ENCODER_TIMEOUT)
         {
             setState(STATE_STALL);
+            Serial.println("State stall!");
         }
         if (millis() - lastStateSwitch > MILLIS_STATE_TIMEOUT)
         {
             setState(STATE_TIMEOUT);
+            Serial.println("State timoeut!");
         }
     }
 }
