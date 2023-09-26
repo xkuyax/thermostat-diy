@@ -10,6 +10,10 @@
 #define STATE_TIMEOUT 4
 #define MICROS_ENCODER_TIMEOUT 5000
 #define MILLIS_STATE_TIMEOUT 5000
+#define MILLIS_CLOSE_TIMEOUT 10000
+#define MOTOR_ENABLE_OFF 0
+#define MOTOR_ENABLE_ON 255
+#define MOTOR_ENABLE_CLOSE 200
 
 uint8 encoderCount1 = 0;
 uint8 encoderCount2 = 0;
@@ -20,8 +24,8 @@ unsigned long lastStateSwitch = 0;
 
 void setState(int newState)
 {
-    state = newState;
     lastStateSwitch = millis();
+    state = newState;
 }
 
 void isrShared()
@@ -47,39 +51,21 @@ void openValve()
 {
     setState(STATE_OPENING);
     digitalWrite(LED_BUILTIN, HIGH);
-    motorControl(1, 255);
+    motorControl(1, MOTOR_ENABLE_ON);
 }
 
 void closeValve()
 {
     setState(STATE_CLOSING);
     digitalWrite(LED_BUILTIN, HIGH);
-    motorControl(2, 127);
-    delay(100);
-    int i = 0;
-    unsigned long diff = 0;
-    while ((diff < 20 || diff > 400000) && i < 6000)
-    {
-        diff = millis() - lastEncoderPulse;
-        // Serial.println(diff);
-        delay(1);
-        i++;
-    }
-    if (i >= 5000)
-    {
-        Serial.println("timeout");
-    }
-    else
-    {
-        digitalWrite(LED_BUILTIN, LOW);
-        Serial.println("stall detected");
-    }
-    motorControl(0, 0);
+    motorControl(2, MOTOR_ENABLE_CLOSE);
 }
 
 void motorControl(int mode, int power)
 {
     lastEncoderPulse = micros();
+    analogWrite(PIN_MOTOR_ENABLE, power);
+    //   digitalWrite(PIN_MOTOR_ENABLE, 1);
     if (mode == 0)
     {
         digitalWrite(PIN_MOTOR_PHASE_1, 0);
@@ -95,7 +81,7 @@ void motorControl(int mode, int power)
         digitalWrite(PIN_MOTOR_PHASE_1, 0);
         digitalWrite(PIN_MOTOR_PHASE_2, 1);
     }
-    analogWrite(PIN_MOTOR_ENABLE, power);
+    delay(100);
 }
 
 void setup()
@@ -136,15 +122,35 @@ void loop()
     }
     if (state == STATE_CLOSING || state == STATE_OPENING)
     {
-        if (lastEncoderDiff < MICROS_ENCODER_TIMEOUT)
+        bool disableMotors = false;
+        uint32 delay = 0;
+        if (state == STATE_CLOSING)
+        {
+            delay = MILLIS_CLOSE_TIMEOUT;
+        }
+        else
+        {
+            delay = MILLIS_STATE_TIMEOUT;
+        }
+        if (lastEncoderDiff > MICROS_ENCODER_TIMEOUT)
         {
             setState(STATE_STALL);
-            Serial.println("State stall!");
+            Serial.print("State stall! ");
+            Serial.println(lastEncoderDiff);
+            disableMotors = true;
         }
-        if (millis() - lastStateSwitch > MILLIS_STATE_TIMEOUT)
+        auto diff = millis() - lastStateSwitch;
+        if (diff > delay)
         {
             setState(STATE_TIMEOUT);
-            Serial.println("State timoeut!");
+            Serial.println("State timeout!");
+            Serial.println(diff);
+            Serial.println(delay);
+            disableMotors = true;
+        }
+        if (disableMotors)
+        {
+            motorControl(0, MOTOR_ENABLE_OFF);
         }
     }
 }
